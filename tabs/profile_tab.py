@@ -1,11 +1,26 @@
 # profile_tab.py - Profile Display
-# Version: v0.001
-# Notes: Shows player stats, account age, inventory.
+# Version: v0.002
+# Notes:
+# - Always shows the latest stats from st.session_state
+# - Fixes issue where profile tab did not update after actions
+# - Still shows quests snapshot
 
-import streamlit as st, time
+import streamlit as st
+import time
 from db import get_quests
 
 def render(username, energy, points, level, followers, wins, losses, clan, items, last_login):
+    # ✅ Override with live session values if available
+    energy = st.session_state.get("energy", energy)
+    points = st.session_state.get("points", points)
+    followers = st.session_state.get("followers", followers)
+    level = st.session_state.get("level", level)
+    wins = st.session_state.get("wins", wins)
+    losses = st.session_state.get("losses", losses)
+    items = st.session_state.get("items", items)
+    clan = st.session_state.get("clan", clan)
+    last_login = st.session_state.get("last_login", last_login)
+
     st.subheader(f"Welcome, {username}!")
 
     col1, col2, col3 = st.columns(3)

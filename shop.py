@@ -1,49 +1,78 @@
-# shop_tab.py - Item Shop UI
-# Version: v0.001
-# Notes: Buy/Upgrade items from shop.py
+# shop.py - Item Shop & Upgrades
+# Version: v0.002
+# Notes:
+# - Fixed bug: items always treated as list
+# - Safe JSON handling
+# - Upgrade paths supported
+
+import json
 
 # --- Shop Items ---
 shop_items = {
-    "Meme Book 📖": {"cost": 30, "effect": {"points": 10, "followers": 5}},
-    "Telescope 🔭": {"cost": 50, "effect": {"debate_bonus": 10}},
-    "Laptop 💻": {"cost": 80, "effect": {"meme_bonus": 15}},
-    "Banner 🚩": {"cost": 40, "effect": {"followers": 20}},
+    "Meme Book 📖": {"cost": 30},
+    "Telescope 🔭": {"cost": 50},
+    "Laptop 💻": {"cost": 80},
+    "Banner 🚩": {"cost": 40}
 }
 
-# --- Upgrade Map ---
+# --- Upgrade Paths ---
 upgrade_paths = {
-    "Meme Book 📖": {"target": "Meme Encyclopedia 📚", "cost": 50},
-    "Telescope 🔭": {"target": "Golden Telescope ✨", "cost": 75},
-    "Laptop 💻": {"target": "Supercomputer 🖥️", "cost": 120},
-    "Banner 🚩": {"target": "Mega Banner 🏴", "cost": 60},
+    "Meme Book 📖": {"target": "Advanced Meme Book 📚", "cost": 60},
+    "Telescope 🔭": {"target": "Space Telescope 🛰️", "cost": 100},
+    "Laptop 💻": {"target": "Supercomputer 🖥️", "cost": 150},
+    "Banner 🚩": {"target": "War Banner 🏴", "cost": 90}
 }
+
 
 # --- Buy Item ---
 def buy_item(item, followers, items):
-    if item not in shop_items:
-        return followers, items, "⚠️ Item not found."
-    if followers < shop_items[item]["cost"]:
-        return followers, items, "⚠️ Not enough followers."
+    # Normalize items
+    if isinstance(items, str):
+        try:
+            items = json.loads(items)
+        except:
+            items = []
+    elif not isinstance(items, list):
+        items = []
 
-    followers -= shop_items[item]["cost"]
+    cost = shop_items[item]["cost"]
+    if followers < cost:
+        return followers, items, f"⚠️ Not enough followers to buy {item}."
+
+    if item in items:
+        return followers, items, f"⚠️ You already own {item}."
+
+    followers -= cost
     items.append(item)
-    return followers, items, f"✅ You bought {item}!"
+    return followers, items, f"✅ Bought {item}!"
+
 
 # --- Upgrade Item ---
 def upgrade_item(item, followers, items):
-    if item not in items:
-        return followers, items, "⚠️ You don't own this item."
+    # Normalize items
+    if isinstance(items, str):
+        try:
+            items = json.loads(items)
+        except:
+            items = []
+    elif not isinstance(items, list):
+        items = []
 
     if item not in upgrade_paths:
-        return followers, items, "⚠️ This item cannot be upgraded."
+        return followers, items, f"⚠️ {item} cannot be upgraded."
 
-    upgrade_info = upgrade_paths[item]
-    if followers < upgrade_info["cost"]:
-        return followers, items, f"⚠️ Not enough followers (Need {upgrade_info['cost']})."
+    path = upgrade_paths[item]
+    target, cost = path["target"], path["cost"]
 
-    # Do the upgrade
-    followers -= upgrade_info["cost"]
+    if followers < cost:
+        return followers, items, f"⚠️ Not enough followers to upgrade {item}."
+
+    if target in items:
+        return followers, items, f"⚠️ You already upgraded to {target}."
+
+    # Perform upgrade
+    followers -= cost
     items.remove(item)
-    items.append(upgrade_info["target"])
+    items.append(target)
 
-    return followers, items, f"✨ {item} upgraded into {upgrade_info['target']}!"
+    return followers, items, f"✨ {item} upgraded → {target}!"
