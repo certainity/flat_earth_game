@@ -1,12 +1,12 @@
 # app.py - Flat Earth Wars Main App
-# Version: v0.013
+# Version: v0.015
 # Notes:
 # - Ordered tabs: Profile, Quests, Battles, Clan, Shop, Others
-# - Persistent login across refresh using .login_state.json
-# - Postgres-ready (no migrate_db needed)
+# - Session-based login + optional Remember Me (cookies per browser)
+# - Postgres-ready
 # - Clan War + Patch players stubs included
 
-import streamlit as st, json, os
+import streamlit as st, json
 from db import (
     init_db, get_player, add_player, patch_old_players, update_player,
     reset_clan_war, get_player_by_credentials,
@@ -30,26 +30,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Persistent Login File ---
-LOGIN_FILE = ".login_state.json"
-
-def save_login_state(username):
-    with open(LOGIN_FILE, "w") as f:
-        json.dump({"logged_in": True, "username": username}, f)
-
-def load_login_state():
-    if os.path.exists(LOGIN_FILE):
-        try:
-            with open(LOGIN_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {"logged_in": False, "username": None}
-    return {"logged_in": False, "username": None}
-
-def clear_login_state():
-    if os.path.exists(LOGIN_FILE):
-        os.remove(LOGIN_FILE)
-
 # --- Init DB ---
 try:
     init_db()
@@ -67,16 +47,27 @@ winner = reset_clan_war()
 if winner:
     st.success(f"🎉 Weekly reset complete! {winner} received +50 Followers and +5 Energy each!")
 
-# --- Load Login State on Startup ---
-state = load_login_state()
+# --- Session Init ---
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = state.get("logged_in", False)
-    st.session_state.username = state.get("username", None)
+    st.session_state.logged_in = False
+    st.session_state.username = None
+
+# --- Remember Me (via cookies) ---
+cookie_key = "flat_earth_user"
+
+if not st.session_state.logged_in:
+    # Check if cookie exists
+    if cookie_key in st.session_state:
+        auto_user = st.session_state[cookie_key]
+        player = get_player(auto_user)
+        if player:
+            st.session_state.logged_in = True
+            st.session_state.username = auto_user
+            st.info(f"🔑 Auto-logged in as {auto_user}")
 
 # --- Login Page ---
 if not st.session_state.logged_in:
     st.title("🔐 Login to Flat Earth Wars")
-    # st.caption(db_status)
 
     tab_login, tab_register = st.tabs(["Login", "Register"])
 
@@ -84,12 +75,14 @@ if not st.session_state.logged_in:
     with tab_login:
         login_user = st.text_input("Username", key="login_user")
         login_pass = st.text_input("Password", type="password", key="login_pass")
+        remember_me = st.checkbox("Remember Me")
         if st.button("Login"):
             player = get_player_by_credentials(login_user, login_pass)
             if player:
                 st.session_state.logged_in = True
                 st.session_state.username = login_user
-                save_login_state(login_user)   # ✅ persist to file
+                if remember_me:
+                    st.session_state[cookie_key] = login_user  # ✅ save cookie
                 st.success(f"✅ Welcome back, {login_user}!")
                 st.rerun()
             else:
@@ -105,7 +98,8 @@ if not st.session_state.logged_in:
                 add_player(reg_user, reg_pass, reg_clan)
                 st.session_state.logged_in = True
                 st.session_state.username = reg_user
-                save_login_state(reg_user)   # ✅ auto login + persist
+                if remember_me:
+                    st.session_state[cookie_key] = reg_user
                 st.success(f"✅ Account created! Welcome, {reg_user}!")
                 st.rerun()
             else:
@@ -120,7 +114,8 @@ else:
         st.error("⚠️ Player not found. Please login or register again.")
         st.session_state.logged_in = False
         st.session_state.username = None
-        clear_login_state()   # clear saved file
+        if cookie_key in st.session_state:
+            del st.session_state[cookie_key]
         st.rerun()  
     else:
         try:
@@ -148,9 +143,6 @@ else:
         st.session_state.items = items
         st.session_state.clan = clan
         st.session_state.last_login = last_login
-
-        # ✅ Keep login persistent
-        save_login_state(username)
 
         # --- Tabs (Reordered) ---
         tabs = st.tabs([
@@ -183,7 +175,7 @@ else:
                 username, st.session_state.followers, st.session_state.level
             )
 
-        # --- Battles (PvP + Boss + Logs) ---
+        # --- Battles ---
         with tabs[2]:
             st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.wins, st.session_state.losses = pvp_tab.render(
                 username, st.session_state.clan, st.session_state.energy,
@@ -196,9 +188,9 @@ else:
                 st.session_state.followers, st.session_state.items
             )
             st.divider()
-            battle_log_tab.render(username)  # ✅ moved here
+            battle_log_tab.render(username)
 
-        # --- Clan (Wars + History) ---
+        # --- Clan ---
         with tabs[3]:
             st.session_state.show_clan = st.radio("Clan Menu", ["⚔️ Clan Wars", "📜 History"])
             if st.session_state.show_clan == "⚔️ Clan Wars":
@@ -206,7 +198,7 @@ else:
             else:
                 clan_history_tab.render()
 
-        # --- Shop (Items + Market) ---
+        # --- Shop ---
         with tabs[4]:
             st.session_state.followers, st.session_state.items = shop_tab.render(
                 st.session_state.followers, st.session_state.items
@@ -216,7 +208,7 @@ else:
                 username, st.session_state.followers, st.session_state.items
             )
 
-        # --- Others (leaderboard, achievements, events, template) ---
+        # --- Others ---
         with tabs[5]:
             leaderboard_tab.render()
             st.divider()
@@ -248,5 +240,6 @@ else:
             if st.button("🚪 Logout"):
                 st.session_state.logged_in = False
                 st.session_state.username = None
-                clear_login_state()   # ✅ clear file too
+                if cookie_key in st.session_state:
+                    del st.session_state[cookie_key]  # clear cookie
                 st.rerun()
