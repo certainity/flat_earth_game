@@ -1,9 +1,8 @@
 # boss_battle_tab.py - Boss Battle Feature
-# Version: v0.001
+# Version: v0.002
 # Notes:
-# - Inspired by "Kingdoms at War" style epic battles
-# - Allows all players to attack a global boss
-# - Shows HP bar, rewards when defeated
+# - Fixed unpacking error (boss table has 7 columns)
+# - Now supports boss.active flag
 
 import streamlit as st
 from db import get_active_boss, damage_boss, spawn_boss, update_player
@@ -22,7 +21,8 @@ def render(username, energy, points, followers, items):
             st.rerun()
         return energy, points, followers
 
-    boss_id, name, max_hp, hp, reward_followers, reward_points = boss
+    # ✅ Unpack all 7 fields
+    boss_id, name, max_hp, hp, reward_followers, reward_points, active = boss
 
     # Boss status
     st.write(f"**{name}** - HP: {hp}/{max_hp}")
@@ -34,7 +34,7 @@ def render(username, energy, points, followers, items):
         # Reward current player (simple distribution)
         followers += reward_followers
         points += reward_points
-        update_player(username, energy, points, 1, followers, items)
+        update_player(username, energy, points, 1, followers, items, 0, 0)
         return energy, points, followers
 
     # Attack button
@@ -48,7 +48,7 @@ def render(username, energy, points, followers, items):
             damage_boss(dmg)
 
             # Save after attack
-            update_player(username, energy, points, 1, followers, items)
+            update_player(username, energy, points, 1, followers, items, 0, 0)
             st.rerun()
 
     return energy, points, followers

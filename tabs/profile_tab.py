@@ -1,9 +1,8 @@
 # profile_tab.py - Profile Display
-# Version: v0.002
+# Version: v0.003
 # Notes:
-# - Always shows the latest stats from st.session_state
-# - Fixes issue where profile tab did not update after actions
-# - Still shows quests snapshot
+# - Fixed unpacking issue (quests has 8 columns now)
+# - Uses object-style access for clarity
 
 import streamlit as st
 import time
@@ -47,8 +46,15 @@ def render(username, energy, points, level, followers, wins, losses, clan, items
     quests = get_quests(username)
     if quests:
         st.write("**Active Quests:**")
-        for qid, qtype, prog, goal, reward, done in quests:
+        for q in quests:
+            qid = q.id
+            qtype = q.quest_type
+            prog = q.progress
+            goal = q.goal
+            reward = q.reward
+            done = q.completed
+
             status = "✅ Completed" if done else f"{prog}/{goal}"
-            st.write(f"• {qtype.title()} Quest → {status}")
+            st.write(f"• {qtype.title()} Quest → {status} (Reward: {reward} followers)")
     else:
         st.info("No active quests right now.")

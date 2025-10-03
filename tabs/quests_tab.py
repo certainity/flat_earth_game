@@ -1,6 +1,6 @@
 # quests_tab.py - Daily Quests
-# Version: v0.001
-# Notes: Fixed mismatch with app.py, added progress bars.
+# Version: v0.002
+# Notes: Fixed unpacking issue (quests has 8 columns)
 
 import streamlit as st
 from db import (
@@ -15,7 +15,14 @@ def render(username, followers, level):
 
     quests = get_quests(username)
     if quests:
-        for qid, qtype, prog, goal, reward, completed in quests:
+        for q in quests:
+            qid = q.id
+            qtype = q.quest_type
+            prog = q.progress
+            goal = q.goal
+            reward = q.reward
+            completed = q.completed
+
             if completed:
                 st.success(f"✅ {qtype.title()} Quest — Completed (Reward: {reward} followers)")
                 if st.button(f"Claim {reward} Followers", key=f"claim{qid}"):
@@ -27,7 +34,7 @@ def render(username, followers, level):
                 st.progress(progress_bar)
                 if prog < goal:
                     if st.button(f"Update Progress ({qtype})", key=f"upd{qid}"):
-                        update_quest_progress(qid, 1)
+                        update_quest_progress(qid, prog + 1)
                         st.rerun()
     else:
         st.info("No active quests right now. Come back tomorrow for new quests!")

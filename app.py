@@ -1,14 +1,14 @@
 # app.py - Flat Earth Wars Main App
-# Version: v0.011
+# Version: v0.013
 # Notes:
 # - Ordered tabs: Profile, Quests, Battles, Clan, Shop, Others
 # - Persistent login across refresh using .login_state.json
-# - Fixed cross-user overwrite (session + file sync)
-# - Moved Battle Log under Battles, Market under Shop
+# - Postgres-ready (no migrate_db needed)
+# - Clan War + Patch players stubs included
 
 import streamlit as st, json, os
 from db import (
-    init_db, migrate_db, get_player, add_player, patch_old_players, update_player,
+    init_db, get_player, add_player, patch_old_players, update_player,
     reset_clan_war, get_player_by_credentials,
     get_active_boss, spawn_boss
 )
@@ -51,9 +51,12 @@ def clear_login_state():
         os.remove(LOGIN_FILE)
 
 # --- Init DB ---
-init_db()
-migrate_db()
-patch_old_players()
+try:
+    init_db()
+    patch_old_players()
+    db_status = "✅ Connected to Postgres Database"
+except Exception as e:
+    db_status = f"❌ Database connection failed: {e}"
 
 # --- Ensure Boss Table + Spawn if Missing ---
 if not get_active_boss():
@@ -73,6 +76,7 @@ if "logged_in" not in st.session_state:
 # --- Login Page ---
 if not st.session_state.logged_in:
     st.title("🔐 Login to Flat Earth Wars")
+    # st.caption(db_status)
 
     tab_login, tab_register = st.tabs(["Login", "Register"])
 
@@ -113,7 +117,11 @@ else:
     player = get_player(username)
 
     if not player:
-        st.error("⚠️ Player not found. Please register again.")
+        st.error("⚠️ Player not found. Please login or register again.")
+        st.session_state.logged_in = False
+        st.session_state.username = None
+        clear_login_state()   # clear saved file
+        st.rerun()  
     else:
         try:
             (player_id, username, password, energy, points, level, followers,
@@ -236,6 +244,7 @@ else:
 
         # --- Logout ---
         with st.sidebar:
+            st.caption(db_status)
             if st.button("🚪 Logout"):
                 st.session_state.logged_in = False
                 st.session_state.username = None
