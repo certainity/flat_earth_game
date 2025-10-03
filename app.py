@@ -5,7 +5,8 @@
 # - Ordered tabs: Profile, Quests, Battles, Clan, Shop, Others
 # - Postgres-ready (no migrate_db needed)
 # - Clan War + Patch players stubs included
-
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 import streamlit as st, json
 from streamlit_cookies_manager import EncryptedCookieManager
 from db import (
@@ -68,7 +69,7 @@ if "logged_in" not in st.session_state:
 # --- Login Page ---
 if not st.session_state.logged_in:
     st.title("🔐 Login to Flat Earth Wars")
-    st.caption(db_status)
+    # st.caption(db_status)
 
     tab_login, tab_register = st.tabs(["Login", "Register"])
 
@@ -240,7 +241,7 @@ else:
 
         # --- Logout ---
         with st.sidebar:
-            st.caption(db_status)
+            # st.caption(db_status)
             if st.button("🚪 Logout"):
                 st.session_state.logged_in = False
                 st.session_state.username = None
