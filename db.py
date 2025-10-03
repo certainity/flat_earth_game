@@ -341,26 +341,6 @@ def patch_old_players():
 def reset_clan_war():
     return None
 
-# --- Daily Quests ---
-def generate_daily_quests(username, level):
-    """Generate daily quests based on player level."""
-    with engine.begin() as conn:
-        # Check if player already has quests today
-        existing = conn.execute(
-            select(quests).where(quests.c.username == username)
-        ).fetchall()
-
-        if not existing:
-            # Example: scale quest goal with level
-            conn.execute(insert(quests).values(
-                username=username,
-                quest_type="battle",
-                progress=0,
-                goal=3 + level,  # harder for higher level
-                reward=10 + (2 * level),
-                completed=0,
-                timestamp=time.time()
-            ))
 
 # --- Market ---
 def list_item(seller, item, price):
@@ -421,3 +401,55 @@ def deactivate_event(event_id):
             .where(events.c.id == event_id)
             .values(active=0)
         )
+
+# --- Quests ---
+def get_quests(username):
+    with engine.begin() as conn:
+        return conn.execute(
+            select(quests).where(quests.c.username == username)
+        ).fetchall()
+
+def reset_user_quests(username):
+    """Delete all quests for a user (admin reset)."""
+    with engine.begin() as conn:
+        conn.execute(delete(quests).where(quests.c.username == username))
+
+def generate_daily_quests(username, level):
+    """Generate a fresh set of daily quests based on player level."""
+    with engine.begin() as conn:
+        # Always remove old quests first
+        conn.execute(delete(quests).where(quests.c.username == username))
+
+        # Define quests pool by level
+        quest_pool = []
+        if level <= 2:
+            quest_pool = [
+                ("battle", 3 + level, 10 + level * 2),   # requires 3–5 battles
+                ("meme", 2 + level, 5 + level * 2),      # requires 2–4 memes
+            ]
+        elif level <= 5:
+            quest_pool = [
+                ("battle", 4 + level, 12 + level * 2),
+                ("meme", 3 + level, 6 + level * 2),
+                ("debate", 2 + level, 8 + level * 2),
+            ]
+        else:
+            quest_pool = [
+                ("battle", 5 + level, 15 + level * 3),
+                ("meme", 4 + level, 10 + level * 2),
+                ("debate", 3 + level, 12 + level * 3),
+                ("boss", 1, 25 + level * 5),
+            ]
+
+        # Insert new quests
+        for qtype, goal, reward in quest_pool:
+            conn.execute(insert(quests).values(
+                username=username,
+                quest_type=qtype,
+                progress=0,
+                goal=goal,
+                reward=int(reward),   # ✅ ensure numeric
+                completed=0,
+                timestamp=time.time()
+            ))
+

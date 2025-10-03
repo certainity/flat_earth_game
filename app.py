@@ -176,9 +176,13 @@ else:
 
         # --- Quests ---
         with tabs[1]:
-            st.session_state.followers = quests_tab.render(
-                username, st.session_state.followers, st.session_state.level
-            )
+            st.session_state.followers, st.session_state.energy, st.session_state.points = quests_tab.render(
+            st.session_state.username,
+            st.session_state.followers,
+            st.session_state.level,
+            st.session_state.energy,
+            st.session_state.points
+        )
 
         # --- Battles (PvP + Boss + Logs) ---
         with tabs[2]:
