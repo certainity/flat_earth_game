@@ -1,12 +1,11 @@
 # app.py - Flat Earth Wars Main App
-# Version: v0.008
+# Version: v0.010
 # Notes:
-# - Persistent login across refresh using .login_state.json
-# - Permanent login until manual logout
-# - Fixed live stat sync across tabs
-# - Added Boss table auto-init + auto-spawn
+# - Ordered tabs: Profile, Quests, Battle, Clan, Shop, then Others
+# - Session-based login (fixed cross-user overwrite)
+# - Custom page title & favicon
 
-import streamlit as st, json, os
+import streamlit as st, json
 from db import (
     init_db, migrate_db, get_player, add_player, patch_old_players, update_player,
     reset_clan_war, get_player_by_credentials,
@@ -16,38 +15,26 @@ from game_logic import regenerate_energy
 
 # --- Import Tabs ---
 from tabs import (
-    profile_tab, actions_tab, shop_tab, pvp_tab,
-    leaderboard_tab, battle_log_tab, clan_wars_tab,
-    clan_history_tab, quests_tab, achievements_tab,
-    market_tab, events_tab, template_tab, boss_battle_tab
+    profile_tab, quests_tab, pvp_tab, boss_battle_tab,
+    clan_wars_tab, clan_history_tab, shop_tab,
+    leaderboard_tab, battle_log_tab, achievements_tab,
+    market_tab, events_tab, template_tab
 )
 
-LOGIN_FILE = ".login_state.json"
-
-# --- Helpers ---
-def save_login_state(username):
-    with open(LOGIN_FILE, "w") as f:
-        json.dump({"logged_in": True, "username": username}, f)
-
-def load_login_state():
-    if os.path.exists(LOGIN_FILE):
-        try:
-            with open(LOGIN_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return {"logged_in": False, "username": None}
-    return {"logged_in": False, "username": None}
-
-def clear_login_state():
-    if os.path.exists(LOGIN_FILE):
-        os.remove(LOGIN_FILE)
+# --- Streamlit Page Config ---
+st.set_page_config(
+    page_title="Flat Earth Wars",
+    page_icon="🌍",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- Init DB ---
 init_db()
 migrate_db()
 patch_old_players()
 
-# --- Ensure Boss Table + Spawn a Boss ---
+# --- Ensure Boss Table + Spawn if Missing ---
 if not get_active_boss():
     spawn_boss("Globie Overlord 👹", hp=1000, reward_followers=200, reward_points=100)
 
@@ -56,11 +43,10 @@ winner = reset_clan_war()
 if winner:
     st.success(f"🎉 Weekly reset complete! {winner} received +50 Followers and +5 Energy each!")
 
-# --- Load login state ---
+# --- Login State ---
 if "logged_in" not in st.session_state:
-    state = load_login_state()
-    st.session_state.logged_in = state.get("logged_in", False)
-    st.session_state.username = state.get("username", None)
+    st.session_state.logged_in = False
+    st.session_state.username = None
 
 # --- Login Page ---
 if not st.session_state.logged_in:
@@ -77,7 +63,6 @@ if not st.session_state.logged_in:
             if player:
                 st.session_state.logged_in = True
                 st.session_state.username = login_user
-                save_login_state(login_user)   # ✅ persist login
                 st.success(f"✅ Welcome back, {login_user}!")
                 st.rerun()
             else:
@@ -93,7 +78,6 @@ if not st.session_state.logged_in:
                 add_player(reg_user, reg_pass, reg_clan)
                 st.session_state.logged_in = True
                 st.session_state.username = reg_user
-                save_login_state(reg_user)   # ✅ auto login + persist
                 st.success(f"✅ Account created! Welcome, {reg_user}!")
                 st.rerun()
             else:
@@ -122,7 +106,7 @@ else:
         # Energy regen
         energy, last_login = regenerate_energy(energy, level, last_login)
 
-        # --- Sync with session_state (always current) ---
+        # --- Sync with session_state ---
         st.session_state.energy = energy
         st.session_state.points = points
         st.session_state.followers = followers
@@ -133,71 +117,82 @@ else:
         st.session_state.clan = clan
         st.session_state.last_login = last_login
 
-        # --- Tabs ---
+        # --- Tabs (Reordered) ---
         tabs = st.tabs([
-            "📋 Profile", "🎯 Actions", "🛒 Shop", "🥊 PvP",
-            "🏆 Leaderboard", "📜 Battle Log", "⚔️ Clan Wars",
-            "📜 Clan War History", "🎯 Quests", "🏅 Achievements",
-            "💱 Market", "🌍 Events", "🆕 Template", "👹 Boss Battle" 
+            "📋 Profile",
+            "🎯 Quests",
+            "⚔️ Battles",
+            "🏰 Clan",
+            "🛒 Shop",
+            "📜 Others"
         ])
 
+        # --- Profile ---
         with tabs[0]:
-            profile_tab.render(username,
-                               st.session_state.energy,
-                               st.session_state.points,
-                               st.session_state.level,
-                               st.session_state.followers,
-                               st.session_state.wins,
-                               st.session_state.losses,
-                               st.session_state.clan,
-                               st.session_state.items,
-                               st.session_state.last_login)
-
-        with tabs[1]:
-            st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.level = actions_tab.render(
-                username, st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.level, st.session_state.items
+            profile_tab.render(
+                username,
+                st.session_state.energy,
+                st.session_state.points,
+                st.session_state.level,
+                st.session_state.followers,
+                st.session_state.wins,
+                st.session_state.losses,
+                st.session_state.clan,
+                st.session_state.items,
+                st.session_state.last_login
             )
 
+        # --- Quests ---
+        with tabs[1]:
+            st.session_state.followers = quests_tab.render(
+                username, st.session_state.followers, st.session_state.level
+            )
+
+        # --- Battles (PvP + Boss) ---
         with tabs[2]:
+            st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.wins, st.session_state.losses = pvp_tab.render(
+                username, st.session_state.clan, st.session_state.energy,
+                st.session_state.points, st.session_state.followers,
+                st.session_state.items, st.session_state.wins, st.session_state.losses
+            )
+            st.divider()
+            st.session_state.energy, st.session_state.points, st.session_state.followers = boss_battle_tab.render(
+                username, st.session_state.energy, st.session_state.points,
+                st.session_state.followers, st.session_state.items
+            )
+
+        # --- Clan (Wars + History) ---
+        with tabs[3]:
+            st.session_state.show_clan = st.radio("Clan Menu", ["⚔️ Clan Wars", "📜 History"])
+            if st.session_state.show_clan == "⚔️ Clan Wars":
+                clan_wars_tab.render()
+            else:
+                clan_history_tab.render()
+
+        # --- Shop ---
+        with tabs[4]:
             st.session_state.followers, st.session_state.items = shop_tab.render(
                 st.session_state.followers, st.session_state.items
             )
 
-        with tabs[3]:
-            st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.wins, st.session_state.losses = pvp_tab.render(
-                username, st.session_state.clan, st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.items, st.session_state.wins, st.session_state.losses
-            )
-
-        with tabs[4]:
-            leaderboard_tab.render()
-
+        # --- Others (all remaining features) ---
         with tabs[5]:
+            leaderboard_tab.render()
+            st.divider()
             battle_log_tab.render(username)
-
-        with tabs[6]:
-            clan_wars_tab.render()
-
-        with tabs[7]:
-            clan_history_tab.render()
-
-        with tabs[8]:
-            st.session_state.followers = quests_tab.render(username, st.session_state.followers, st.session_state.level)
-
-        with tabs[9]:
+            st.divider()
             achievements_tab.render(username)
-
-        with tabs[10]:
-            st.session_state.followers, st.session_state.items = market_tab.render(username, st.session_state.followers, st.session_state.items)
-
-        with tabs[11]:
+            st.divider()
+            st.session_state.followers, st.session_state.items = market_tab.render(
+                username, st.session_state.followers, st.session_state.items
+            )
+            st.divider()
             events_tab.render()
-
-        with tabs[12]:
-            st.session_state.followers = template_tab.render(username=username, followers=st.session_state.followers, items=st.session_state.items)
-
-        with tabs[13]:
-            st.session_state.energy, st.session_state.points, st.session_state.followers = boss_battle_tab.render(
-                username, st.session_state.energy, st.session_state.points, st.session_state.followers, st.session_state.items
+            st.divider()
+            st.session_state.followers = template_tab.render(
+                username=username,
+                followers=st.session_state.followers,
+                items=st.session_state.items
             )
 
         # --- Save Player ---
@@ -217,5 +212,4 @@ else:
             if st.button("🚪 Logout"):
                 st.session_state.logged_in = False
                 st.session_state.username = None
-                clear_login_state()   # ✅ clear file
                 st.rerun()
